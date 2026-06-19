@@ -2,9 +2,22 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Orbit Design - Docking Simulator Lite (vHUD-Plus)</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; user-select: none; }
+        /* 全体でズームや文字選択、不要なタッチ挙動を徹底排除 */
+        * {
+            box-sizing: border-box;
+            -webkit-text-size-adjust: none;
+            -webkit-tap-highlight-color: rgba(0,0,0,0);
+            -webkit-touch-callout: none;
+        }
+        body, html {
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            overflow: hidden; background: #000;
+            user-select: none; -webkit-user-select: none;
+            position: fixed;
+        }
         
         /* SF風 HUD UI */
         #hud {
@@ -13,11 +26,11 @@
             color: #00ff66;
             font-family: 'Courier New', Courier, monospace;
             pointer-events: none;
-            box-sizing: border-box;
-            padding: 30px;
+            padding: 20px;
+            z-index: 10;
         }
         
-        /* 中央のクロスヘア（照準） */
+        /* 中央のクロスヘア */
         #crosshair-container {
             position: absolute;
             top: 50%; left: 50%;
@@ -25,179 +38,165 @@
             text-align: center;
         }
         #crosshair {
-            width: 90px; height: 90px;
-            border: 1px dashed rgba(0, 255, 102, 0.5);
+            width: 60px; height: 60px;
+            border: 2px dashed #00ff66;
             border-radius: 50%;
             display: flex; align-items: center; justify-content: center;
-            font-size: 28px; font-weight: bold;
-            box-shadow: 0 0 10px rgba(0,255,102,0.1);
+            font-size: 20px; font-weight: bold;
         }
-        #crosshair::before { content: ''; position: absolute; width: 12px; height: 1px; background: #00ff66; }
-        #crosshair::after { content: ''; position: absolute; width: 1px; height: 12px; background: #00ff66; }
 
-        /* 各種ステータス表示 */
+        /* テレメトリパネル共通 */
         .telemetry {
             position: absolute;
-            background: rgba(0, 10, 3, 0.75);
+            background: rgba(0, 20, 0, 0.6);
             border: 1px solid #00ff66;
-            padding: 15px;
-            border-radius: 6px;
-            font-size: 15px;
-            line-height: 1.6;
-            box-shadow: 0 0 20px rgba(0,255,102,0.15);
-            backdrop-filter: blur(4px);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 13px;
+            line-height: 1.4;
+            box-shadow: 0 0 10px rgba(0,255,102,0.2);
         }
-        #left-panel { top: 30px; left: 30px; width: 220px; }
-        #right-panel { top: 30px; right: 30px; width: 220px; }
+        #left-panel { top: 20px; left: 20px; }
+        #right-panel { top: 20px; right: 20px; }
         
-        /* ★未来感のある姿勢データグラフィカルパネル */
+        /* 姿勢データパネル */
         #attitude-panel {
-            bottom: 30px;
-            right: 30px;
-            width: 280px;
+            bottom: 20px; right: 20px; width: 220px;
+            background: rgba(0, 15, 0, 0.75);
+            border: 1px solid #00ff66;
+            padding: 10px; border-radius: 5px; font-size: 12px;
+            box-shadow: 0 0 10px rgba(0,255,102,0.2);
         }
         .panel-title {
-            font-size: 12px;
-            font-weight: bold;
-            border-bottom: 1px solid #00ff66;
-            margin-bottom: 10px;
-            padding-bottom: 3px;
-            letter-spacing: 1px;
-            color: #a3ffca;
+            font-weight: bold; border-bottom: 1px dashed #00ff66;
+            margin-bottom: 6px; padding-bottom: 2px;
+            letter-spacing: 1px; color: #88ffaa;
         }
-        .gauge-container {
-            margin-bottom: 8px;
-        }
-        .gauge-label {
-            display: flex;
-            justify-content: space-between;
-            font-size: 12px;
-            margin-bottom: 2px;
-        }
-        /* メーターバーの土台 */
-        .gauge-bar-bg {
-            width: 100%;
-            height: 6px;
-            background: rgba(0, 255, 102, 0.15);
-            border-radius: 3px;
-            overflow: hidden;
-            position: relative;
-        }
-        /* 動くメーターバー本体 */
-        .gauge-bar-fill {
-            height: 100%;
-            background: #00ff66;
-            width: 0%;
-            transition: width 0.1s linear;
-            box-shadow: 0 0 8px #00ff66;
-        }
+        .data-row { display: flex; justify-content: space-between; margin-bottom: 3px; }
         
-        /* ターゲットオフセット表示の未来化 */
-        .matrix-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 10px;
-            margin-top: 5px;
+        /* PC用操作ガイド */
+        #guide-panel { bottom: 20px; left: 20px; font-size: 11px; color: #88ffaa; }
+
+        /* スマホ用コントロールパッド（安全な下部固定配置） */
+        #mobile-controls {
+            display: none;
+            position: absolute;
+            bottom: 10px; left: 50%;
+            transform: translateX(-50%);
+            width: 95%; max-width: 640px; height: 130px;
+            pointer-events: auto;
+            justify-content: space-between; align-items: center;
+            z-index: 100;
         }
-        .matrix-box {
-            border: 1px dashed rgba(0, 255, 102, 0.4);
-            padding: 6px;
-            text-align: center;
-            background: rgba(0, 255, 102, 0.05);
-            font-size: 13px;
+        .pad-group { display: flex; gap: 8px; }
+        .v-btn {
+            width: 52px; height: 44px;
+            background: rgba(0, 40, 0, 0.75); border: 1.5px solid #00ff66; color: #00ff66;
+            border-radius: 8px; font-size: 13px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            touch-action: none; user-select: none; -webkit-user-select: none;
         }
-        .matrix-box span {
-            display: block;
-            font-size: 16px;
-            font-weight: bold;
-            color: #fff;
-            text-shadow: 0 0 5px #00ff66;
-        }
+        .v-btn:active { background: #00ff66; color: #000; box-shadow: 0 0 10px #00ff66; }
         
-        /* 操作ガイド */
-        #guide-panel { bottom: 30px; left: 30px; font-size: 13px; color: #88ffaa; width: 280px; }
+        .d-pad { display: grid; grid-template-columns: repeat(3, 44px); grid-template-rows: repeat(3, 44px); gap: 4px; }
+        .d-btn {
+            background: rgba(0, 40, 0, 0.75); border: 1.5px solid #00ff66; color: #00ff66;
+            border-radius: 6px; font-size: 12px; font-weight: bold;
+            display: flex; align-items: center; justify-content: center;
+            touch-action: none; user-select: none; -webkit-user-select: none;
+        }
+        .d-btn:active { background: #00ff66; color: #000; box-shadow: 0 0 10px #00ff66; }
+
+        /* レスポンシブ切り替え（タッチデバイス判定も兼ねる） */
+        @media (max-width: 900px), (pointer: coarse) {
+            #guide-panel { display: none; }
+            #mobile-controls { display: flex; }
+            #attitude-panel { bottom: 155px; right: 10px; width: 190px; font-size: 11px; }
+            #left-panel { top: 10px; left: 10px; padding: 6px; font-size: 11px; }
+            #right-panel { top: 10px; right: 10px; padding: 6px; font-size: 11px; }
+        }
 
         /* メッセージ＆リスタートボタン */
         #game-over-screen {
             position: absolute;
-            top: 50%; left: 50%;
-            transform: translate(-50%, -50%);
-            text-align: center;
-            display: none;
-            pointer-events: auto;
-            background: rgba(0, 2, 0, 0.9);
-            border: 2px solid #00ff66;
-            padding: 40px;
-            border-radius: 10px;
-            color: #00ff66;
-            font-family: sans-serif;
-            box-shadow: 0 0 40px rgba(0,255,102,0.4);
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            text-align: center; display: none; pointer-events: auto;
+            background: rgba(0, 0, 0, 0.95); border: 2px solid #00ff66;
+            padding: 25px; border-radius: 10px; color: #00ff66;
+            font-family: sans-serif; box-shadow: 0 0 30px rgba(0,255,102,0.5);
+            width: 85%; max-width: 380px; z-index: 200;
         }
-        #game-over-title { font-size: 24px; margin-bottom: 10px; font-weight: bold; letter-spacing: 2px; }
-        #game-over-reason { font-size: 14px; margin-bottom: 20px; color: #88ffaa; line-height: 1.5; }
+        #game-over-title { font-size: 18px; margin-bottom: 10px; font-weight: bold; letter-spacing: 2px; }
+        #game-over-reason { font-size: 13px; margin-bottom: 20px; color: #88ffaa; }
         #restart-btn {
-            background: #00ff66; color: #000;
-            border: none; padding: 12px 30px;
-            font-size: 16px; font-weight: bold; cursor: pointer;
-            border-radius: 5px; transition: all 0.2s;
+            background: #00ff66; color: #000; border: none; padding: 12px 30px;
+            font-size: 15px; font-weight: bold; cursor: pointer; border-radius: 5px;
         }
-        #restart-btn:hover { background: #fff; box-shadow: 0 0 15px #fff; }
     </style>
 </head>
 <body>
 
     <div id="hud">
         <div id="crosshair-container">
-            <div id="crosshair"></div>
-            <div style="font-size: 10px; margin-top: 8px; letter-spacing: 1px;">ORBITAL LOCK</div>
+            <div id="crosshair">+</div>
+            <div style="font-size: 9px; margin-top: 4px;">TGT ALIGN</div>
         </div>
 
         <div id="left-panel" class="telemetry">
-            <div class="panel-title">📡 NAVIGATION DATA</div>
-            <div>RANGE : <span id="txt-dist" style="color:#fff;">0</span> m</div>
-            <div>R-VEL : <span id="txt-speed" style="color:#fff;">0.00</span> m/s</div>
+            <div>RANGE : <span id="txt-dist">0</span> m</div>
+            <div>R-VEL : <span id="txt-speed">0.00</span> m/s</div>
         </div>
 
         <div id="right-panel" class="telemetry">
-            <div class="panel-title">🔋 SYSTEMS STATUS</div>
-            <div>FUEL  : <span id="txt-fuel" style="color:#fff;">100.0</span> %</div>
-            <div>ALIGN : <span id="txt-align" style="color:#fff;">0.0</span> %</div>
-            <div>R-DIF : <span id="txt-roll" style="color:#fff;">0.0</span>°</div>
+            <div>FUEL  : <span id="txt-fuel">100.0</span> %</div>
+            <div>ALIGN : <span id="txt-align">0.0</span> %</div>
+            <div>ROLL DIFF : <span id="txt-roll">0.0</span>°</div>
         </div>
 
         <div id="attitude-panel" class="telemetry">
-            <div class="panel-title">🛸 SHIP ATTITUDE H.U.D.</div>
-            
-            <div class="gauge-container">
-                <div class="gauge-label"><span>PITCH (上下)</span><span id="txt-pitch-deg">0.0°</span></div>
-                <div class="gauge-bar-bg"><div id="bar-pitch" class="gauge-bar-fill"></div></div>
-            </div>
-            
-            <div class="gauge-container">
-                <div class="gauge-label"><span>YAW   (左右)</span><span id="txt-yaw-deg">0.0°</span></div>
-                <div class="gauge-bar-bg"><div id="bar-yaw" class="gauge-bar-fill"></div></div>
-            </div>
-            
-            <div class="gauge-container">
-                <div class="gauge-label"><span>ROLL  (回転)</span><span id="txt-roll-deg">0.0°</span></div>
-                <div class="gauge-bar-bg"><div id="bar-roll" class="gauge-bar-fill"></div></div>
-            </div>
-            
-            <div class="panel-title" style="margin-top: 12px;">🎯 TARGETING MATRIX</div>
-            <div class="matrix-grid">
-                <div class="matrix-box">HORIZ [X]<span id="txt-offset-x">0.00m</span></div>
-                <div class="matrix-box">VERT [Y]<span id="txt-offset-y">0.00m</span></div>
-            </div>
+            <div class="panel-title">▼ ATTITUDE TELEMETRY</div>
+            <div class="data-row"><span>PITCH (上下):</span><span id="txt-pitch-deg">0.0</span>°</div>
+            <div class="data-row"><span>YAW   (左右):</span><span id="txt-yaw-deg">0.0</span>°</div>
+            <div class="data-row"><span>ROLL  (回転):</span><span id="txt-roll-deg">0.0</span>°</div>
+            <div style="margin-top: 6px;" class="panel-title">▼ TARGET DIFFERENCE</div>
+            <div class="data-row"><span>X-OFFSET:</span><span id="txt-offset-x">0.00</span>m</div>
+            <div class="data-row"><span>Y-OFFSET:</span><span id="txt-offset-y">0.00</span>m</div>
         </div>
 
         <div id="guide-panel" class="telemetry">
-            <div class="panel-title">⌨️ FLIGHT CONTROLS</div>
-            <div>W / S   : 前進 / 後退 (メイン推進)</div>
-            <div>A / D   : ヨー (左右旋回)</div>
-            <div>Q / E   : ピッチ (上下旋回)</div>
-            <div>Z / C   : ロール (機体回転・慣性あり)</div>
+            <div>【CONTROLS】</div>
+            <div>W/S : 前進 / 後退</div>
+            <div>A/D : ヨー (左右旋回)</div>
+            <div>Q/E : ピッチ (上下旋回)</div>
+            <div>Z/C : ロール (機体回転)</div>
             <div>矢印キー : 並進移動 (上下左右RCS)</div>
-            <div>SPACE   : 慣性制動 (全軸減速ブレーキ)</div>
+            <div>SPACE : 慣性制動 (全軸減速)</div>
+        </div>
+    </div>
+
+    <div id="mobile-controls">
+        <div class="d-pad">
+            <div></div><div class="d-btn" id="btn-pitch-up">▲Q</div><div></div>
+            <div class="d-btn" id="btn-yaw-left">◀A</div><div class="d-btn" style="font-size:8px; background:transparent; border:none; color:#050;">ROT</div><div class="d-btn" id="btn-yaw-right">D▶</div>
+            <div></div><div class="d-btn" id="btn-pitch-down">▼E</div><div></div>
+        </div>
+        
+        <div style="display:flex; flex-direction:column; gap:4px; align-items:center;">
+            <div style="display:flex; gap:4px;">
+                <div class="v-btn" id="btn-fwd" style="width:58px; height:38px;">前進W</div>
+                <div class="v-btn" id="btn-bwd" style="width:58px; height:38px;">後退S</div>
+            </div>
+            <div class="v-btn" id="btn-brk" style="width:120px; height:34px; font-size:11px; background:rgba(50,0,0,0.6);">【制動】SPACE</div>
+            <div style="display:flex; gap:4px;">
+                <div class="v-btn" id="btn-roll-l" style="width:58px; height:34px; font-size:11px;">逆転Z</div>
+                <div class="v-btn" id="btn-roll-r" style="width:58px; height:34px; font-size:11px;">回転C</div>
+            </div>
+        </div>
+
+        <div class="d-pad">
+            <div></div><div class="d-btn" id="btn-rcs-up">▲</div><div></div>
+            <div class="d-btn" id="btn-rcs-left">◀</div><div class="d-btn" style="font-size:8px; background:transparent; border:none; color:#050;">RCS</div><div class="d-btn" id="btn-rcs-right">▶</div>
+            <div></div><div class="d-btn" id="btn-rcs-down">▼</div><div></div>
         </div>
     </div>
 
@@ -211,7 +210,6 @@
     <script type="module">
         import * as THREE from 'three';
 
-        // シーン・カメラ・レンダラー初期化
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 0.1, 2000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -235,55 +233,41 @@
         const starMat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.2, sizeAttenuation: false });
         scene.add(new THREE.Points(starGeom, starMat));
 
-        // 宇宙ステーション（ISS風モデル）の構築
+        // 宇宙ステーション
         const stationGroup = new THREE.Group();
-
-        // 素材定義
         const metalMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.3, metalness: 0.8 });
         const darkMetalMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.5, metalness: 0.7 });
         const solarMat = new THREE.MeshStandardMaterial({ color: 0x0044aa, roughness: 0.2, metalness: 0.6, emissive: 0x001133 });
         const portLedMat = new THREE.MeshBasicMaterial({ color: 0x00ff66 });
 
-        // メインモジュール
         const core = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 12, 16), metalMat);
         core.rotation.x = Math.PI / 2;
         stationGroup.add(core);
 
-        // トラス
         const truss = new THREE.Mesh(new THREE.CylinderGeometry(0.4, 0.4, 26, 8), darkMetalMat);
         truss.rotation.z = Math.PI / 2;
         stationGroup.add(truss);
 
-        // 太陽電池パドル
         const panelGeom = new THREE.BoxGeometry(5, 0.05, 10);
-        const panelPositions = [-10, -5, 5, 10];
-        panelPositions.forEach(x => {
+        [-10, -5, 5, 10].forEach(x => {
             const panel = new THREE.Mesh(panelGeom, solarMat);
             panel.position.set(x, 0, 0);
             stationGroup.add(panel);
         });
 
-        // ドッキングポートの構築
         const portGroup = new THREE.Group();
         portGroup.position.set(0, 0, 6);
-
         const portBase = new THREE.Mesh(new THREE.CylinderGeometry(1.3, 1.6, 2, 24), darkMetalMat);
         portBase.rotation.x = Math.PI / 2;
         portGroup.add(portBase);
 
-        const hatchMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6, metalness: 0.5 });
-        const hatch = new THREE.Mesh(new THREE.CircleGeometry(0.8, 16), hatchMat);
+        const hatch = new THREE.Mesh(new THREE.CircleGeometry(0.8, 16), new THREE.MeshStandardMaterial({ color: 0x222222 }));
         hatch.position.set(0, 0, 1.01);
         portGroup.add(hatch);
 
-        const ringGeom = new THREE.TorusGeometry(1.0, 0.06, 6, 32);
-        const ring1 = new THREE.Mesh(ringGeom, metalMat);
+        const ring1 = new THREE.Mesh(new THREE.TorusGeometry(1.0, 0.06, 6, 32), metalMat);
         ring1.position.set(0, 0, 1.0);
         portGroup.add(ring1);
-        
-        const ring2 = new THREE.Mesh(new THREE.TorusGeometry(1.2, 0.03, 6, 32), metalMat);
-        ring2.position.set(0, 0, 0.9);
-        portGroup.add(ring2);
 
         const ledRing = new THREE.Mesh(new THREE.TorusGeometry(0.9, 0.015, 6, 32), portLedMat);
         ledRing.position.set(0, 0, 1.02);
@@ -296,13 +280,12 @@
         stationGroup.add(portGroup);
         scene.add(stationGroup);
 
-        // 宇宙船の物理・状態変数
+        // 物理・状態変数
         let pos, vel, rot;
         let rotVel = new THREE.Vector3(0, 0, 0);
         let fuel, isDead;
         const keys = {};
 
-        // ステーションの自転速度
         const stationRotationSpeed = 0.002;
 
         window.resetSimulation = function() {
@@ -312,23 +295,54 @@
             rotVel.set(0, 0, 0);
             fuel = 100.0;
             isDead = false;
-
             stationGroup.rotation.set(0, 0, Math.random() * Math.PI * 2);
-
             camera.position.copy(pos);
             camera.setRotationFromEuler(rot);
-
             document.getElementById('game-over-screen').style.display = 'none';
         };
         resetSimulation();
 
+        // PCキーイベント
         window.addEventListener('keydown', e => { if(!isDead) keys[e.code] = true; });
         window.addEventListener('keyup', e => keys[e.code] = false);
+
+        // スマホ用タッチイベントの最適化（フリーズ・誤作動防止構造）
+        function setupTouchBtn(id, keyCode) {
+            const btn = document.getElementById(id);
+            if(!btn) return;
+            
+            const startHandler = (e) => {
+                if (e.cancelable) e.preventDefault();
+                if(!isDead) keys[keyCode] = true;
+            };
+            
+            const endHandler = (e) => {
+                if (e.cancelable) e.preventDefault();
+                keys[keyCode] = false;
+            };
+
+            btn.addEventListener('touchstart', startHandler, {passive: false});
+            btn.addEventListener('touchend', endHandler, {passive: false});
+            btn.addEventListener('touchcancel', endHandler, {passive: false});
+        }
+        
+        setupTouchBtn('btn-fwd', 'KeyW');
+        setupTouchBtn('btn-bwd', 'KeyS');
+        setupTouchBtn('btn-pitch-up', 'KeyQ');
+        setupTouchBtn('btn-pitch-down', 'KeyE');
+        setupTouchBtn('btn-yaw-left', 'KeyA');
+        setupTouchBtn('btn-yaw-right', 'KeyD');
+        setupTouchBtn('btn-roll-l', 'KeyZ');
+        setupTouchBtn('btn-roll-r', 'KeyC');
+        setupTouchBtn('btn-brk', 'Space');
+        setupTouchBtn('btn-rcs-up', 'ArrowUp');
+        setupTouchBtn('btn-rcs-down', 'ArrowDown');
+        setupTouchBtn('btn-rcs-left', 'ArrowLeft');
+        setupTouchBtn('btn-rcs-right', 'ArrowRight');
 
         function update() {
             if (isDead) return;
 
-            // ステーション自転
             stationGroup.rotation.z += stationRotationSpeed;
 
             const thrustPower = 0.003;
@@ -354,27 +368,24 @@
                 if (keys['ArrowLeft'])  { vel.add(new THREE.Vector3(-1, 0, 0).applyEuler(rot).multiplyScalar(rThrustPower)); thrustApplied = true; }
                 if (keys['ArrowRight']) { vel.add(new THREE.Vector3(1, 0, 0).applyEuler(rot).multiplyScalar(rThrustPower)); thrustApplied = true; }
 
-                if (keys['KeyA']) { rotVel.y += rotThrust; fuel -= 0.02; } 
-                if (keys['KeyD']) { rotVel.y -= rotThrust; fuel -= 0.02; } 
-                if (keys['KeyQ']) { rotVel.x += rotThrust; fuel -= 0.02; } 
-                if (keys['KeyE']) { rotVel.x -= rotThrust; fuel -= 0.02; } 
-                if (keys['KeyZ']) { rotVel.z += rotThrust; fuel -= 0.02; } 
-                if (keys['KeyC']) { rotVel.z -= rotThrust; fuel -= 0.02; } 
+                if (keys['KeyA']) { rotVel.y += rotThrust; fuel -= 0.01; } 
+                if (keys['KeyD']) { rotVel.y -= rotThrust; fuel -= 0.01; } 
+                if (keys['KeyQ']) { rotVel.x += rotThrust; fuel -= 0.01; } 
+                if (keys['KeyE']) { rotVel.x -= rotThrust; fuel -= 0.01; } 
+                if (keys['KeyZ']) { rotVel.z += rotThrust; fuel -= 0.01; } 
+                if (keys['KeyC']) { rotVel.z -= rotThrust; fuel -= 0.01; } 
 
                 if (keys['Space']) {
                     vel.multiplyScalar(0.95);
                     rotVel.multiplyScalar(0.90);
-                    fuel -= 0.05;
+                    fuel -= 0.03;
                 }
 
-                if (thrustApplied) fuel -= 0.08;
+                if (thrustApplied) fuel -= 0.05;
                 fuel = Math.max(0, fuel);
             }
 
-            rot.x += rotVel.x;
-            rot.y += rotVel.y;
-            rot.z += rotVel.z;
-
+            rot.x += rotVel.x; rot.y += rotVel.y; rot.z += rotVel.z;
             pos.add(vel);
             camera.position.copy(pos);
             camera.setRotationFromEuler(rot);
@@ -398,7 +409,6 @@
             const rollDiffDeg = rollDiffRad * (180 / Math.PI);
             const rollSpeedDiff = Math.abs(rotVel.z - stationRotationSpeed) * 60;
 
-            // 姿勢度数計算
             const radToDeg = 180 / Math.PI;
             let pitchDisplay = (rot.x * radToDeg) % 360;
             let yawDisplay = (rot.y * radToDeg) % 360;
@@ -407,14 +417,12 @@
             if (yawDisplay < 0) yawDisplay += 360;
             if (rollDisplay < 0) rollDisplay += 360;
 
-            // ターゲットオフセット計算
             const relTargetPos = worldTargetPos.clone().sub(pos);
             const rightVec = new THREE.Vector3(1, 0, 0).applyEuler(rot);
             const upVec = new THREE.Vector3(0, 1, 0).applyEuler(rot);
             const offsetX = relTargetPos.dot(rightVec);
             const offsetY = relTargetPos.dot(upVec);
 
-            // HUDテキスト更新
             document.getElementById('txt-dist').innerText = dist.toFixed(2);
             document.getElementById('txt-speed').innerText = relativeSpeed.toFixed(2);
             document.getElementById('txt-fuel').innerText = fuel.toFixed(1);
@@ -422,18 +430,12 @@
             document.getElementById('txt-align').innerText = alignPercent.toFixed(1);
             document.getElementById('txt-roll').innerText = rollDiffDeg.toFixed(1);
 
-            document.getElementById('txt-pitch-deg').innerText = pitchDisplay.toFixed(1) + "°";
-            document.getElementById('txt-yaw-deg').innerText = yawDisplay.toFixed(1) + "°";
-            document.getElementById('txt-roll-deg').innerText = rollDisplay.toFixed(1) + "°";
-            document.getElementById('txt-offset-x').innerText = (offsetX >= 0 ? "+" : "") + offsetX.toFixed(2) + "m";
-            document.getElementById('txt-offset-y').innerText = (offsetY >= 0 ? "+" : "") + offsetY.toFixed(2) + "m";
+            document.getElementById('txt-pitch-deg').innerText = pitchDisplay.toFixed(1);
+            document.getElementById('txt-yaw-deg').innerText = yawDisplay.toFixed(1);
+            document.getElementById('txt-roll-deg').innerText = rollDisplay.toFixed(1);
+            document.getElementById('txt-offset-x').innerText = offsetX.toFixed(2);
+            document.getElementById('txt-offset-y').innerText = offsetY.toFixed(2);
 
-            // ★新機能：インジケーターバーの伸縮アニメーション（未来感の演出）
-            document.getElementById('bar-pitch').style.width = (pitchDisplay / 360 * 100) + "%";
-            document.getElementById('bar-yaw').style.width = (yawDisplay / 360 * 100) + "%";
-            document.getElementById('bar-roll').style.width = (rollDisplay / 360 * 100) + "%";
-
-            // 判定（緩和されたアライメント基準 0.85）
             if (dist <= 1.0) {
                 const isStraight = (alignment > 0.85);
                 const isSafeSpeed = (relativeSpeed <= 3.0);
@@ -446,18 +448,17 @@
                     isDead = true;
                     let reason = "";
                     if (!isSafeSpeed) {
-                        reason = `【衝突大破】進入速度が速すぎます (${relativeSpeed.toFixed(2)} m/s) 。3.00 m/s以下で接近してください。`;
+                        reason = `【衝突大破】進入速度が速すぎます (${relativeSpeed.toFixed(1)} m/s)。3.00 m/s以下で接近してください。`;
                     } else if (!isStraight) {
-                        reason = "【接触大破】斜めに進入したためポートに激突しました。ターゲットを画面中央（ALIGNを高く）に保ってください。";
+                        reason = "【接触大破】斜めに進入したため、ポートに接触しました。正面を向いてアプローチしてください。";
                     } else if (!isRollAligned) {
-                        reason = `【結合失敗】ロール角が合っていません (ズレ: ${rollDiffDeg.toFixed(1)}°)。ステーションと同じ傾きにしてください。`;
+                        reason = `【ドッキング失敗】ロール角度がズレています (${rollDiffDeg.toFixed(1)}°)。0°に近づけてください。`;
                     } else if (!isRollSpeedSynced) {
-                        reason = "【結合部破損】ロール回転速度が同期していません。自転の勢いをステーションと合わせてください。";
+                        reason = "【結合部破損】ロール回転速度がステーションと同期していません。";
                     }
                     showResult(false, reason);
                 }
             }
-            
             if (fuel <= 0 && relativeSpeed < 0.01 && dist > 1.0) {
                 showResult(false, "【作戦失敗】燃料が枯渇し、宇宙の迷子になりました。");
             }
@@ -465,26 +466,31 @@
 
         function showResult(isSuccess, reasonText) {
             isDead = true;
+            for (let k in keys) keys[k] = false;
+            
             const screen = document.getElementById('game-over-screen');
             const title = document.getElementById('game-over-title');
             const reason = document.getElementById('game-over-reason');
             reason.innerText = reasonText;
             if (isSuccess) {
-                title.innerText = "MISSION SUCCESS (ドッキング成功！)";
+                title.innerText = "MISSION SUCCESS";
                 title.style.color = "#00ff66";
                 screen.style.border = "2px solid #00ff66";
             } else {
-                title.innerText = "GAME OVER (ミッション失敗)";
+                title.innerText = "MISSION FAILED";
                 title.style.color = "#ff3333";
                 screen.style.border = "2px solid #ff3333";
             }
             screen.style.display = 'block';
         }
 
+        // リサイズ・画面回転イベントの最適化
         window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            camera.aspect = w / h;
             camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setSize(w, h);
         });
 
         function render() {
