@@ -426,7 +426,7 @@
             document.getElementById('txt-dist').innerText = dist.toFixed(2);
             document.getElementById('txt-speed').innerText = relativeSpeed.toFixed(2);
             document.getElementById('txt-fuel').innerText = fuel.toFixed(1);
-            const alignPercent = Math.max(0, (alignment + 1) / 2 * 100);
+            const alignPercent = Math.max(0, (-alignment + 1) / 2 * 100);
             document.getElementById('txt-align').innerText = alignPercent.toFixed(1);
             document.getElementById('txt-roll').innerText = rollDiffDeg.toFixed(1);
 
@@ -436,11 +436,11 @@
             document.getElementById('txt-offset-x').innerText = offsetX.toFixed(2);
             document.getElementById('txt-offset-y').innerText = offsetY.toFixed(2);
 
-            if (dist <= 1.0) {
-                const isStraight = (alignment > 0.85);
+            if (dist <= 1.5) {
+                const isStraight = (alignment < -0.65);
                 const isSafeSpeed = (relativeSpeed <= 3.0);
-                const isRollAligned = (rollDiffDeg <= 5.0);
-                const isRollSpeedSynced = (rollSpeedDiff <= 0.25);
+                const isRollAligned = (rollDiffDeg <= 20.0);
+                const isRollSpeedSynced = (rollSpeedDiff <= 1.0);
 
                 if (isStraight && isSafeSpeed && isRollAligned && isRollSpeedSynced) {
                     showResult(true, "見事な操縦です！パーフェクトドッキング！");
@@ -450,7 +450,7 @@
                     if (!isSafeSpeed) {
                         reason = `【衝突大破】進入速度が速すぎます (${relativeSpeed.toFixed(1)} m/s)。3.00 m/s以下で接近してください。`;
                     } else if (!isStraight) {
-                        reason = "【接触大破】斜めに進入したため、ポートに接触しました。正面を向いてアプローチしてください。";
+                        reason = "【接触大破】斜めに進入したため、ポートに接触しました。ドッキングポート中心へ機首を合わせて接近してください。";
                     } else if (!isRollAligned) {
                         reason = `【ドッキング失敗】ロール角度がズレています (${rollDiffDeg.toFixed(1)}°)。0°に近づけてください。`;
                     } else if (!isRollSpeedSynced) {
